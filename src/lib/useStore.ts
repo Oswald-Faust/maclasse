@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { authHeaders } from "@/lib/api";
 
 export type SoloClaim = {
   projectId: string;
@@ -40,7 +41,7 @@ export type StoreData = {
   uiSettings: UiSettings;
 };
 
-export function useStore(pollMs = 4000) {
+export function useStore(pollMs = 4000, classId?: string) {
   const [data, setData] = useState<StoreData>({
     soloClaims: {},
     groups: [],
@@ -52,7 +53,8 @@ export function useStore(pollMs = 4000) {
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/state", { cache: "no-store" });
+      const url = classId ? `/api/state?classId=${classId}` : "/api/state";
+      const res = await fetch(url, { cache: "no-store", headers: authHeaders() });
       if (!res.ok) return;
       const json = (await res.json()) as StoreData;
       if (mounted.current) setData(json);
@@ -61,7 +63,7 @@ export function useStore(pollMs = 4000) {
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, []);
+  }, [classId]);
 
   useEffect(() => {
     mounted.current = true;

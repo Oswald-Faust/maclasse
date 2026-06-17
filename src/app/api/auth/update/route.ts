@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mutate, type Student } from "@/lib/store";
+import { connectDB } from "@/lib/db/connect";
+import { User, type UserDoc } from "@/lib/db/models";
 import {
   getStudentFromRequest,
   hashPassword,
@@ -49,46 +50,41 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await mutate<
-      { code: "OK"; student: Student } | { code: "EMAIL_TAKEN" } | { code: "BAD_PASSWORD" }
-    >(async (data) => {
-      const student = data.students[current.id];
-      if (!student) return { data, result: { code: "BAD_PASSWORD" } };
+    await connectDB();
 
-      // E-mail déjà utilisé par un AUTRE compte ?
-      const emailClash = Object.values(data.students).some(
-        (s) => s.id !== student.id && s.email === email
-      );
-      if (emailClash) return { data, result: { code: "EMAIL_TAKEN" } };
-
-      // Changement de mot de passe : vérifier l'actuel.
-      if (wantsPassword) {
-        if (!verifyPassword(body.currentPassword ?? "", student.passwordHash)) {
-          return { data, result: { code: "BAD_PASSWORD" } };
-        }
-        student.passwordHash = hashPassword(body.newPassword as string);
-      }
-
-      student.firstName = firstName;
-      student.lastName = lastName;
-      student.email = email;
-      return { data, result: { code: "OK", student } };
-    });
-
-    if (result.code === "EMAIL_TAKEN") {
+    const emailClash = await User.findOne({ email, _id: { $ne: current.id } }).lean();
+    if (emailClash) {
       return NextResponse.json(
         { error: "Cet e-mail est déjà utilisé par un autre compte." },
         { status: 409 }
       );
     }
-    if (result.code === "BAD_PASSWORD") {
+
+    const user = await User.findById(current.id);
+    if (!user) {
+      return NextResponse.json({ error: "Compte introuvable." }, { status: 404 });
+    }
+
+    if (wantsPassword) {
+      if (!verifyPassword(body.currentPassword ?? "", user.passwordHash)) {
+        return NextResponse.json({ error: "Mot de passe actuel incorrect." }, { status: 401 });
+      }
+      user.passwordHash = hashPassword(body.newPassword as string);
+    }
+
+    user.firstName = firstName;
+    user.lastName = lastName;
+    user.email = email;
+    await user.save();
+
+    return NextResponse.json({ ok: true, student: toPublic(user as unknown as UserDoc) });
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("E11000")) {
       return NextResponse.json(
-        { error: "Mot de passe actuel incorrect." },
-        { status: 401 }
+        { error: "Cet e-mail est déjà utilisé par un autre compte." },
+        { status: 409 }
       );
     }
-    return NextResponse.json({ ok: true, student: toPublic(result.student) });
-  } catch {
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }
 }

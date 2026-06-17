@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { GROUP_PROJECTS } from "@/data/projects";
 import type { Group, GroupMember, StoreData } from "@/lib/useStore";
 import { useToast } from "./Toast";
+import { authHeaders } from "@/lib/api";
 
 export function GroupSection({
   data,
@@ -176,7 +177,7 @@ function JoinGroup({
     try {
       const res = await fetch("/api/groups/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ groupId, firstName, lastName }),
       });
       const json = await res.json();
@@ -286,7 +287,7 @@ function CreateGroupForm({ onCreated }: { onCreated: (g: Group) => void }) {
     try {
       const res = await fetch("/api/groups/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ name, members }),
       });
       const json = await res.json();
@@ -407,7 +408,7 @@ function ChooseProject({
     try {
       const res = await fetch("/api/groups/claim", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ groupId: group.id, projectId }),
       });
       const json = await res.json();

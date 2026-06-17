@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mutate, genId, type GroupMember } from "@/lib/store";
+import { connectDB } from "@/lib/db/connect";
+import { Group } from "@/lib/db/models";
+import { getStudentFromRequest } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
+type Member = { firstName: string; lastName: string };
+
 export async function POST(req: NextRequest) {
-  let body: { name?: string; members?: GroupMember[] };
+  const me = await getStudentFromRequest(req);
+  if (!me) {
+    return NextResponse.json({ error: "Non authentifié." }, { status: 401 });
+  }
+  if (!me.classId) {
+    return NextResponse.json({ error: "Tu n'es rattaché à aucune promo." }, { status: 400 });
+  }
+
+  let body: { name?: string; members?: Member[] };
   try {
     body = await req.json();
   } catch {
@@ -12,9 +24,7 @@ export async function POST(req: NextRequest) {
   }
 
   const name = (body.name ?? "").trim();
-  const rawMembers = Array.isArray(body.members) ? body.members : [];
-
-  const members: GroupMember[] = rawMembers
+  const members: Member[] = (Array.isArray(body.members) ? body.members : [])
     .map((m) => ({
       firstName: (m?.firstName ?? "").trim(),
       lastName: (m?.lastName ?? "").trim(),
@@ -32,26 +42,25 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const group = await mutate(async (data) => {
-      const exists = data.groups.some(
-        (g) => g.name.toLowerCase() === name.toLowerCase()
-      );
-      if (exists) {
-        throw new Error("Un groupe porte déjà ce nom.");
-      }
-      const newGroup = {
-        id: genId("grp"),
-        name,
+    await connectDB();
+    const group = await Group.create({ classId: me.classId, name, members, projectId: null });
+    return NextResponse.json({
+      ok: true,
+      group: {
+        id: group._id.toString(),
+        name: group.name,
         members,
         projectId: null,
         createdAt: Date.now(),
-      };
-      data.groups.push(newGroup);
-      return { data, result: newGroup };
+      },
     });
-    return NextResponse.json({ ok: true, group });
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Erreur serveur.";
-    return NextResponse.json({ error: message }, { status: 409 });
+    if (e instanceof Error && e.message.includes("E11000")) {
+      return NextResponse.json(
+        { error: "Un groupe porte déjà ce nom dans ta promo." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }
 }

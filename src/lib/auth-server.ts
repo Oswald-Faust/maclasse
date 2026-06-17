@@ -1,5 +1,9 @@
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
-import { readStore, type Student } from "@/lib/store";
+import jwt from "jsonwebtoken";
+import { connectDB } from "@/lib/db/connect";
+import { User, type UserDoc } from "@/lib/db/models";
+
+const JWT_SECRET = process.env.JWT_SECRET || "studeasy_dev_secret_change_me";
 
 /** Hache un mot de passe avec un sel aléatoire. Format stocké: "salt:hash". */
 export function hashPassword(password: string): string {
@@ -16,28 +20,52 @@ export function verifyPassword(password: string, stored: string): boolean {
   return ref.length === test.length && timingSafeEqual(ref, test);
 }
 
-export function genToken(): string {
-  return randomBytes(32).toString("hex");
+/** Signe un JWT de session (30 jours). */
+export function signToken(userId: string): string {
+  return jwt.sign({ sub: userId }, JWT_SECRET, { expiresIn: "30d" });
 }
 
-/** Version publique d'un étudiant (sans le hash du mot de passe). */
-export type PublicStudent = Omit<Student, "passwordHash">;
-
-export function toPublic(s: Student): PublicStudent {
-  const { passwordHash: _omit, ...pub } = s;
-  void _omit;
-  return pub;
+export function verifyToken(token: string): string | null {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as { sub?: string };
+    return payload.sub ?? null;
+  } catch {
+    return null;
+  }
 }
 
-/** Récupère l'étudiant lié au token fourni dans le header x-student-token. */
+/** Représentation publique d'un utilisateur (sans le hash). */
+export type PublicStudent = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: "student" | "teacher";
+  classId: string | null;
+  createdAt: number;
+};
+
+export function toPublic(u: UserDoc): PublicStudent {
+  return {
+    id: u._id.toString(),
+    firstName: u.firstName,
+    lastName: u.lastName,
+    email: u.email,
+    role: (u.role as "student" | "teacher") ?? "student",
+    classId: u.classId ? u.classId.toString() : null,
+    createdAt: (u as unknown as { createdAt?: Date }).createdAt?.getTime?.() ?? Date.now(),
+  };
+}
+
+/** Récupère l'utilisateur lié au JWT fourni dans le header x-student-token. */
 export async function getStudentFromRequest(
   req: Request
 ): Promise<PublicStudent | null> {
   const token = req.headers.get("x-student-token");
   if (!token) return null;
-  const data = await readStore();
-  const studentId = data.sessions[token];
-  if (!studentId) return null;
-  const student = data.students[studentId];
-  return student ? toPublic(student) : null;
+  const userId = verifyToken(token);
+  if (!userId) return null;
+  await connectDB();
+  const user = await User.findById(userId).lean<UserDoc>();
+  return user ? toPublic(user) : null;
 }
