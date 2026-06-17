@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db/connect";
-import { ClassRoom, User, SoloClaim, Group, Assignment, Submission } from "@/lib/db/models";
+import {
+  ClassRoom,
+  User,
+  SoloClaim,
+  Group,
+  Assignment,
+  Submission,
+  Interrogation,
+  InterroSubmission,
+  CourseSession,
+  Course,
+} from "@/lib/db/models";
 import { getStudentFromRequest } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +34,16 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Promo introuvable." }, { status: 404 });
     }
 
-    const [students, claims, groups, assignments] = await Promise.all([
-      User.find({ classId, role: "student" }).sort({ createdAt: 1 }).lean(),
-      SoloClaim.find({ classId }).lean(),
-      Group.find({ classId }).sort({ createdAt: 1 }).lean(),
-      Assignment.find({ classId }).sort({ createdAt: -1 }).lean(),
-    ]);
+    const [students, claims, groups, assignments, interrogations, sessions, courses] =
+      await Promise.all([
+        User.find({ classId, role: "student" }).sort({ createdAt: 1 }).lean(),
+        SoloClaim.find({ classId }).lean(),
+        Group.find({ classId }).sort({ createdAt: 1 }).lean(),
+        Assignment.find({ classId }).sort({ createdAt: -1 }).lean(),
+        Interrogation.find({ classId }).sort({ createdAt: -1 }).lean(),
+        CourseSession.find({ classId }).sort({ date: 1 }).lean(),
+        Course.find({ classId }).select("-fileData").sort({ createdAt: -1 }).lean(),
+      ]);
 
     const assignmentIds = assignments.map((a) => a._id);
     const submissions = await Submission.find({ assignmentId: { $in: assignmentIds } }).lean();
@@ -36,6 +51,17 @@ export async function GET(req: NextRequest) {
     for (const s of submissions) {
       const k = s.assignmentId.toString();
       subCount[k] = (subCount[k] ?? 0) + 1;
+    }
+
+    const interroIds = interrogations.map((i) => i._id);
+    const interroSubs = await InterroSubmission.find({
+      interroId: { $in: interroIds },
+      submittedAt: { $ne: null },
+    }).lean();
+    const interroSubCount: Record<string, number> = {};
+    for (const s of interroSubs) {
+      const k = s.interroId.toString();
+      interroSubCount[k] = (interroSubCount[k] ?? 0) + 1;
     }
 
     const soloClaims: Record<
@@ -82,9 +108,40 @@ export async function GET(req: NextRequest) {
         title: a.title,
         description: a.description,
         expectedFormat: a.expectedFormat,
+        kind: a.kind ?? "code",
+        dueDate: a.dueDate ?? null,
         isOpen: a.isOpen,
         submissionCount: subCount[a._id.toString()] ?? 0,
         createdAt: (a.createdAt as Date)?.getTime?.() ?? Date.now(),
+      })),
+      interrogations: interrogations.map((i) => ({
+        id: i._id.toString(),
+        title: i.title,
+        instructions: i.instructions,
+        kind: i.kind ?? "code",
+        durationMinutes: i.durationMinutes,
+        status: i.status,
+        startedAt: i.startedAt ?? null,
+        endsAt: i.endsAt ?? null,
+        submissionCount: interroSubCount[i._id.toString()] ?? 0,
+        createdAt: (i.createdAt as Date)?.getTime?.() ?? Date.now(),
+      })),
+      sessions: sessions.map((s) => ({
+        id: s._id.toString(),
+        date: s.date,
+        title: s.title,
+        description: s.description,
+      })),
+      courses: courses.map((c) => ({
+        id: c._id.toString(),
+        sessionId: c.sessionId ? c.sessionId.toString() : null,
+        title: c.title,
+        kind: c.kind,
+        summary: c.summary,
+        fileName: c.fileName,
+        url: c.url,
+        hasFile: Boolean(c.fileName),
+        createdAt: (c.createdAt as Date)?.getTime?.() ?? Date.now(),
       })),
     });
   } catch {

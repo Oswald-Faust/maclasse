@@ -20,11 +20,16 @@ export type Group = {
   createdAt: number;
 };
 
+export type WorkKind = "code" | "redaction" | "autre";
+export type CourseKind = "pdf" | "resume" | "lien";
+
 export type Assignment = {
   id: string;
   title: string;
   description: string;
   expectedFormat: string;
+  kind: WorkKind;
+  dueDate: number | null;
   createdAt: number;
   updatedAt: number;
   isOpen: boolean;

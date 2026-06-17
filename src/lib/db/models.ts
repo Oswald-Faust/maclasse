@@ -44,13 +44,44 @@ export interface NoteDoc {
   updatedAt: Date;
 }
 
+export type WorkKind = "code" | "redaction" | "autre";
+
 export interface AssignmentDoc {
   _id: Types.ObjectId;
   classId: Types.ObjectId;
   title: string;
   description: string;
   expectedFormat: string;
+  kind: WorkKind;
+  dueDate: number | null; // timestamp ms, ou null = pas de date limite
   isOpen: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InterrogationDoc {
+  _id: Types.ObjectId;
+  classId: Types.ObjectId;
+  title: string;
+  instructions: string;
+  kind: WorkKind;
+  durationMinutes: number;
+  status: "draft" | "running" | "ended";
+  startedAt: number | null;
+  endsAt: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface InterroSubmissionDoc {
+  _id: Types.ObjectId;
+  interroId: Types.ObjectId;
+  userId: Types.ObjectId;
+  firstName: string;
+  lastName: string;
+  content: string;
+  language: string;
+  submittedAt: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +122,32 @@ export interface SettingDoc {
   _id: Types.ObjectId;
   classId: Types.ObjectId;
   boardTickerItems: string[];
+}
+
+export interface CourseSessionDoc {
+  _id: Types.ObjectId;
+  classId: Types.ObjectId;
+  date: number; // timestamp ms du jour de cours
+  title: string;
+  description: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type CourseKind = "pdf" | "resume" | "lien";
+
+export interface CourseDoc {
+  _id: Types.ObjectId;
+  classId: Types.ObjectId;
+  sessionId: Types.ObjectId | null;
+  title: string;
+  kind: CourseKind;
+  summary: string; // contenu texte (résumé)
+  fileData: string; // data URL base64 (PDF)
+  fileName: string;
+  url: string; // lien externe éventuel
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /* ---------------- Schemas ---------------- */
@@ -153,10 +210,40 @@ const AssignmentSchema = new Schema<AssignmentDoc>(
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     expectedFormat: { type: String, default: "" },
+    kind: { type: String, enum: ["code", "redaction", "autre"], default: "code" },
+    dueDate: { type: Number, default: null },
     isOpen: { type: Boolean, default: true },
   },
   { timestamps: true }
 );
+
+const InterrogationSchema = new Schema<InterrogationDoc>(
+  {
+    classId: { type: Schema.Types.ObjectId, ref: "ClassRoom", required: true, index: true },
+    title: { type: String, required: true, trim: true },
+    instructions: { type: String, default: "" },
+    kind: { type: String, enum: ["code", "redaction", "autre"], default: "code" },
+    durationMinutes: { type: Number, default: 30, min: 1, max: 600 },
+    status: { type: String, enum: ["draft", "running", "ended"], default: "draft" },
+    startedAt: { type: Number, default: null },
+    endsAt: { type: Number, default: null },
+  },
+  { timestamps: true }
+);
+
+const InterroSubmissionSchema = new Schema<InterroSubmissionDoc>(
+  {
+    interroId: { type: Schema.Types.ObjectId, ref: "Interrogation", required: true, index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    firstName: { type: String, default: "" },
+    lastName: { type: String, default: "" },
+    content: { type: String, default: "" },
+    language: { type: String, default: "text" },
+    submittedAt: { type: Number, default: null },
+  },
+  { timestamps: true }
+);
+InterroSubmissionSchema.index({ interroId: 1, userId: 1 }, { unique: true });
 
 const SubmissionSchema = new Schema<SubmissionDoc>(
   {
@@ -208,6 +295,30 @@ const SettingSchema = new Schema<SettingDoc>({
   boardTickerItems: { type: [String], default: [] },
 });
 
+const CourseSessionSchema = new Schema<CourseSessionDoc>(
+  {
+    classId: { type: Schema.Types.ObjectId, ref: "ClassRoom", required: true, index: true },
+    date: { type: Number, required: true },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, default: "" },
+  },
+  { timestamps: true }
+);
+
+const CourseSchema = new Schema<CourseDoc>(
+  {
+    classId: { type: Schema.Types.ObjectId, ref: "ClassRoom", required: true, index: true },
+    sessionId: { type: Schema.Types.ObjectId, ref: "CourseSession", default: null, index: true },
+    title: { type: String, required: true, trim: true },
+    kind: { type: String, enum: ["pdf", "resume", "lien"], default: "resume" },
+    summary: { type: String, default: "" },
+    fileData: { type: String, default: "" },
+    fileName: { type: String, default: "" },
+    url: { type: String, default: "" },
+  },
+  { timestamps: true }
+);
+
 /* ---------------- Models ---------------- */
 
 export const User = model<UserDoc>("User", UserSchema);
@@ -215,6 +326,13 @@ export const ClassRoom = model<ClassRoomDoc>("ClassRoom", ClassRoomSchema);
 export const Note = model<NoteDoc>("Note", NoteSchema);
 export const Assignment = model<AssignmentDoc>("Assignment", AssignmentSchema);
 export const Submission = model<SubmissionDoc>("Submission", SubmissionSchema);
+export const Interrogation = model<InterrogationDoc>("Interrogation", InterrogationSchema);
+export const InterroSubmission = model<InterroSubmissionDoc>(
+  "InterroSubmission",
+  InterroSubmissionSchema
+);
+export const CourseSession = model<CourseSessionDoc>("CourseSession", CourseSessionSchema);
+export const Course = model<CourseDoc>("Course", CourseSchema);
 export const Group = model<GroupDoc>("Group", GroupSchema);
 export const SoloClaim = model<SoloClaimDoc>("SoloClaim", SoloClaimSchema);
 export const Setting = model<SettingDoc>("Setting", SettingSchema);

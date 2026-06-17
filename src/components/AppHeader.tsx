@@ -20,6 +20,7 @@ export function AppHeader({
       ? [{ href: "/prof", label: "Mes promos" }]
       : [
           { href: "/dashboard", label: "Tableau de bord" },
+          { href: "/cours", label: "Cours" },
           { href: "/notes", label: "Notes" },
           { href: "/devoirs", label: "Devoirs" },
           { href: "/choix", label: "Projets" },

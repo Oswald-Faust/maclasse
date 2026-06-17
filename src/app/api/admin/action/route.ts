@@ -10,6 +10,8 @@ import {
   Submission,
   Setting,
   Note,
+  Interrogation,
+  InterroSubmission,
 } from "@/lib/db/models";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +45,7 @@ export async function POST(req: NextRequest) {
           Group.deleteMany({ classId: body.classId }),
           Assignment.deleteMany({ classId: body.classId }),
           Setting.deleteMany({ classId: body.classId }),
+          Interrogation.deleteMany({ classId: body.classId }),
         ]);
         break;
       case "deleteUser":
@@ -58,6 +61,8 @@ export async function POST(req: NextRequest) {
           Submission.deleteMany({}),
           Setting.deleteMany({}),
           Note.deleteMany({}),
+          Interrogation.deleteMany({}),
+          InterroSubmission.deleteMany({}),
         ]);
         break;
     }
