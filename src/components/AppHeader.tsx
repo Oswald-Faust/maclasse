@@ -15,12 +15,16 @@ export function AppHeader({
   const pathname = usePathname();
   const router = useRouter();
 
-  const links = [
-    { href: "/dashboard", label: "Tableau de bord" },
-    { href: "/notes", label: "Notes" },
-    { href: "/devoirs", label: "Devoirs" },
-    { href: "/choix", label: "Projets" },
-  ];
+  const links =
+    student?.role === "teacher"
+      ? [{ href: "/prof", label: "Mes promos" }]
+      : [
+          { href: "/dashboard", label: "Tableau de bord" },
+          { href: "/cours", label: "Cours" },
+          { href: "/notes", label: "Notes" },
+          { href: "/devoirs", label: "Devoirs" },
+          { href: "/choix", label: "Projets" },
+        ];
 
   return (
     <header className="sticky top-0 z-40 border-b-[1.5px] border-ink bg-paper/85 backdrop-blur-md">
@@ -72,6 +76,11 @@ export function AppHeader({
                 {student.lastName.charAt(0)}
               </span>
               {student.firstName}
+              {student.role === "teacher" && (
+                <span className="rounded-full bg-cobalt px-1.5 py-0.5 font-mono text-[9px] uppercase text-paper">
+                  Prof
+                </span>
+              )}
             </Link>
           )}
           <button

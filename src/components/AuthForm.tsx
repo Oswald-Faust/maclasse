@@ -6,16 +6,20 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuth } from "@/lib/useAuth";
 
+type Role = "student" | "teacher";
+
 export function AuthForm({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/dashboard";
+  const next = params.get("next");
   const { login } = useAuth();
 
+  const [role, setRole] = useState<Role>("student");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -30,13 +34,16 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
-          isRegister ? { firstName, lastName, email, password } : { email, password }
+          isRegister
+            ? { firstName, lastName, email, password, role, accessCode }
+            : { email, password }
         ),
       });
       const json = await res.json();
       if (res.ok) {
         login(json.token, json.student);
-        router.push(next);
+        const home = json.student.role === "teacher" ? "/prof" : "/dashboard";
+        router.push(next || home);
       } else {
         setError(json.error ?? "Une erreur est survenue.");
       }
@@ -75,19 +82,40 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           </h1>
           <p className="mb-6 mt-1.5 text-sm text-ink-soft">
             {isRegister
-              ? "Inscris-toi pour choisir ton projet et suivre ton avancement."
+              ? "Rejoins ta promo en tant qu'étudiant, ou crée ton espace enseignant."
               : "Connecte-toi pour accéder à ton tableau de bord."}
           </p>
+
+          {isRegister && (
+            <div className="mb-4 flex gap-1 rounded-full border-[1.5px] border-ink bg-card p-1">
+              {(["student", "teacher"] as Role[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setRole(r)}
+                  className={`relative flex-1 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
+                    role === r ? "text-paper" : "text-ink-soft hover:text-ink"
+                  }`}
+                >
+                  {role === r && (
+                    <motion.span
+                      layoutId="role-fill"
+                      className="absolute inset-0 z-0 rounded-full bg-ink"
+                      transition={{ type: "spring", stiffness: 380, damping: 34 }}
+                    />
+                  )}
+                  <span className="relative z-10">
+                    {r === "student" ? "🎓 Étudiant" : "🧑‍🏫 Enseignant"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <form onSubmit={submit} className="flex flex-col gap-3">
             {isRegister && (
               <div className="grid grid-cols-2 gap-3">
-                <Field
-                  placeholder="Prénom"
-                  value={firstName}
-                  onChange={setFirstName}
-                  autoFocus
-                />
+                <Field placeholder="Prénom" value={firstName} onChange={setFirstName} autoFocus />
                 <Field placeholder="Nom" value={lastName} onChange={setLastName} />
               </div>
             )}
@@ -104,6 +132,19 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               value={password}
               onChange={setPassword}
             />
+
+            {isRegister && role === "student" && (
+              <div>
+                <Field
+                  placeholder="Code de la promo (ex. 4F7K2P)"
+                  value={accessCode}
+                  onChange={(v) => setAccessCode(v.toUpperCase())}
+                />
+                <p className="mt-1.5 px-1 text-xs text-ink-faint">
+                  Ce code t&apos;est communiqué par ton enseignant.
+                </p>
+              </div>
+            )}
 
             {error && (
               <motion.div
@@ -123,7 +164,9 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
               {loading
                 ? "Un instant…"
                 : isRegister
-                ? "Créer mon compte →"
+                ? role === "teacher"
+                  ? "Créer mon espace enseignant →"
+                  : "Rejoindre ma promo →"
                 : "Se connecter →"}
             </button>
           </form>

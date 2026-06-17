@@ -28,8 +28,13 @@ export default function Landing() {
 
 function Navbar() {
   const [authed, setAuthed] = useState(false);
+  const [home, setHome] = useState("/dashboard");
   useEffect(() => {
     setAuthed(Boolean(localStorage.getItem("authToken")));
+    try {
+      const s = JSON.parse(localStorage.getItem("authStudent") || "null");
+      if (s?.role === "teacher") setHome("/prof");
+    } catch {}
   }, []);
 
   const links = [
@@ -68,7 +73,7 @@ function Navbar() {
         <div className="flex items-center gap-2">
           {authed ? (
             <Link
-              href="/dashboard"
+              href={home}
               className="rounded-full border-[1.5px] border-ink bg-ink px-4 py-2 text-sm font-bold text-paper transition-colors hover:bg-lime hover:text-ink"
             >
               Mon espace →

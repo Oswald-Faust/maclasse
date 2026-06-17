@@ -7,6 +7,7 @@ import type { StoreData } from "@/lib/useStore";
 import { SoloCard } from "./SoloCard";
 import { Modal } from "./Modal";
 import { useToast } from "./Toast";
+import { authHeaders } from "@/lib/api";
 
 const DIFFS = ["Tous", "Facile", "Intermédiaire", "Avancé"] as const;
 
@@ -64,7 +65,7 @@ export function SoloSection({
     try {
       const res = await fetch("/api/solo/claim", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ projectId: picked.id, firstName, lastName }),
       });
       const json = await res.json();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mutate, type Student } from "@/lib/store";
-import { verifyPassword, genToken, toPublic } from "@/lib/auth-server";
+import { connectDB } from "@/lib/db/connect";
+import { User, type UserDoc } from "@/lib/db/models";
+import { verifyPassword, signToken, toPublic } from "@/lib/auth-server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,29 +17,16 @@ export async function POST(req: NextRequest) {
   const password = body.password ?? "";
 
   try {
-    const result = await mutate<{ student: Student; token: string } | null>(
-      async (data) => {
-        const student = Object.values(data.students).find((s) => s.email === email);
-        if (!student || !verifyPassword(password, student.passwordHash)) {
-          return { data, result: null };
-        }
-        const token = genToken();
-        data.sessions[token] = student.id;
-        return { data, result: { student, token } };
-      }
-    );
-
-    if (!result) {
+    await connectDB();
+    const user = await User.findOne({ email }).lean<UserDoc>();
+    if (!user || !verifyPassword(password, user.passwordHash)) {
       return NextResponse.json(
         { error: "E-mail ou mot de passe incorrect." },
         { status: 401 }
       );
     }
-    return NextResponse.json({
-      ok: true,
-      token: result.token,
-      student: toPublic(result.student),
-    });
+    const student = toPublic(user);
+    return NextResponse.json({ ok: true, token: signToken(student.id), student });
   } catch {
     return NextResponse.json({ error: "Erreur serveur." }, { status: 500 });
   }

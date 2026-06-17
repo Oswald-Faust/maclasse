@@ -7,6 +7,8 @@ export type Student = {
   firstName: string;
   lastName: string;
   email: string;
+  role: "student" | "teacher";
+  classId: string | null;
   createdAt: number;
 };
 
