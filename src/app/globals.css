@@ -1,26 +1,89 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #efebe0;
+  color: #16150f;
+}
+
+/* Texture papier : grille fine + grain léger */
+.bg-paper-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background-color: #efebe0;
+  background-image:
+    linear-gradient(rgba(22, 21, 15, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(22, 21, 15, 0.045) 1px, transparent 1px);
+  background-size: 46px 46px;
+}
+
+/* Halo lime diffus en haut, donne de la profondeur sans cliché */
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 38% at 78% -5%, rgba(198, 247, 81, 0.55), transparent 60%),
+    radial-gradient(45% 30% at 10% 0%, rgba(43, 75, 255, 0.07), transparent 60%);
+}
+
+/* Grain SVG overlay */
+.bg-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+::selection {
+  background: #c6f751;
+  color: #16150f;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-track {
+  background: #efebe0;
+}
+::-webkit-scrollbar-thumb {
+  background: #16150f;
+  border: 3px solid #efebe0;
+  border-radius: 0;
+}
+
+/* Carte papier néo-brutaliste */
+.card-paper {
+  background: #fcfbf6;
+  border: 1.5px solid #16150f;
+}
+
+/* Lien souligné animé */
+.underline-grow {
+  background-image: linear-gradient(#16150f, #16150f);
+  background-size: 0% 1.5px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.3s ease;
+}
+.underline-grow:hover {
+  background-size: 100% 1.5px;
+}
+
+.display-tight {
+  font-family: var(--font-display);
+  letter-spacing: -0.03em;
+  line-height: 0.95;
 }
