@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { openCourseFile } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { Skeleton } from "@/components/Skeleton";
 import { useWorkspace, type Course, type CourseSession } from "@/lib/useWorkspace";
 
 const KIND_BADGE: Record<Course["kind"], string> = {
@@ -59,7 +60,27 @@ export function CoursWorkspace() {
         </div>
       )}
 
-      <div className="flex flex-col gap-8">
+      {loading && (
+        <div className="flex flex-col gap-8">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <section key={index}>
+              <div className="mb-3 flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-xl" />
+                <div className="w-full">
+                  <Skeleton className="h-6 w-48" />
+                  <Skeleton className="mt-2 h-3 w-56" />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Skeleton className="h-40 w-full rounded-[16px]" />
+                <Skeleton className="h-40 w-full rounded-[16px]" />
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      <div className={`flex flex-col gap-8 ${loading ? "hidden" : ""}`}>
         {grouped.map((g, i) => (
           <section key={g.session?.id ?? `orphan-${i}`}>
             <div className="mb-3 flex items-center gap-3">

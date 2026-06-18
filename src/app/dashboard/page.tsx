@@ -29,7 +29,7 @@ const norm = (s: string) => s.trim().toLowerCase();
 function DashboardView({ student }: { student: Student }) {
   const { firstName, lastName, email } = student;
   const { data } = useStore();
-  const { notes, assignments, submissions } = useWorkspace();
+  const { notes, assignments, submissions, interrogations, sessions } = useWorkspace();
 
   const soloClaim = useMemo(
     () =>
@@ -155,6 +155,17 @@ function DashboardView({ student }: { student: Student }) {
       {/* Raccourcis espace de travail */}
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <HubCard
+          href="/agenda"
+          emoji="🗓️"
+          title="Mon agenda"
+          desc={
+            sessions.length > 0
+              ? "Consulte les séances planifiées et les supports associés."
+              : "Aucun agenda disponible pour le moment."
+          }
+          cta="Voir l'agenda"
+        />
+        <HubCard
           href="/notes"
           emoji="📝"
           title="Mes notes"
@@ -175,6 +186,17 @@ function DashboardView({ student }: { student: Student }) {
               : "Aucun devoir ouvert pour le moment."
           }
           cta="Voir les devoirs"
+        />
+        <HubCard
+          href="/interrogations"
+          emoji="⏱️"
+          title="Mes interrogations"
+          desc={
+            interrogations.length > 0
+              ? `${interrogations.filter((i) => i.status === "running").length} en cours · contrôles chronométrés`
+              : "Aucune interrogation pour le moment."
+          }
+          cta="Voir les interrogations"
         />
       </div>
     </div>

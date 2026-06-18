@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { PageSkeleton, Skeleton } from "@/components/Skeleton";
 import { ToastProvider, useToast } from "@/components/Toast";
 import { fmtDateTime } from "@/lib/format";
 
@@ -33,7 +34,7 @@ function Admin() {
       <div className="bg-paper-grid" />
       <div className="bg-glow" />
       <div className="bg-grain" />
-      {ready && (key ? <Console adminKey={key} onLogout={logout} /> : <Login onAuth={setKey} />)}
+      {!ready ? <PageSkeleton /> : key ? <Console adminKey={key} onLogout={logout} /> : <Login onAuth={setKey} />}
     </main>
   );
 }
@@ -199,9 +200,21 @@ function Console({ adminKey, onLogout }: { adminKey: string; onLogout: () => voi
       <h2 className="display-tight mb-4 text-2xl font-bold">Toutes les promos</h2>
 
       {loading ? (
-        <p className="py-10 text-center font-mono text-xs uppercase tracking-widest text-ink-faint">
-          Chargement…
-        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="card-paper rounded-[16px] p-4 shadow-hard-sm">
+              <div className="flex items-start gap-3">
+                <Skeleton className="h-12 w-12 rounded-xl" />
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-6 w-40" />
+                  <Skeleton className="mt-2 h-3 w-32" />
+                  <Skeleton className="mt-2 h-3 w-48" />
+                </div>
+              </div>
+              <Skeleton className="mt-4 h-12 w-full" />
+            </div>
+          ))}
+        </div>
       ) : classes.length === 0 ? (
         <div className="rounded-[14px] border-[1.5px] border-dashed border-ink/30 bg-card/50 py-12 text-center font-mono text-xs uppercase tracking-widest text-ink-faint">
           Aucune promo créée

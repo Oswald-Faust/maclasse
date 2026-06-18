@@ -122,6 +122,12 @@ export interface SettingDoc {
   _id: Types.ObjectId;
   classId: Types.ObjectId;
   boardTickerItems: string[];
+  teacherReminders: {
+    id: string;
+    text: string;
+    dueAt: number | null;
+    createdAt: number;
+  }[];
 }
 
 export interface CourseSessionDoc {
@@ -293,6 +299,20 @@ SoloClaimSchema.index({ classId: 1, projectId: 1 }, { unique: true });
 const SettingSchema = new Schema<SettingDoc>({
   classId: { type: Schema.Types.ObjectId, ref: "ClassRoom", required: true, unique: true },
   boardTickerItems: { type: [String], default: [] },
+  teacherReminders: {
+    type: [
+      new Schema(
+        {
+          id: { type: String, required: true },
+          text: { type: String, required: true, trim: true },
+          dueAt: { type: Number, default: null },
+          createdAt: { type: Number, required: true },
+        },
+        { _id: false }
+      ),
+    ],
+    default: [],
+  },
 });
 
 const CourseSessionSchema = new Schema<CourseSessionDoc>(
