@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
+import { Skeleton } from "@/components/Skeleton";
 import { useWorkspace } from "@/lib/useWorkspace";
 
 function isoDay(value: number) {
@@ -72,50 +73,54 @@ export function AgendaWorkspace() {
         </div>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
-          {visibleDays.map((day) => {
-            const key = isoDay(day.getTime());
-            const entries = sessionsByDay.get(key) ?? [];
-            const inMonth = day.getMonth() === monthStart.getMonth();
-            const isToday = key === isoDay(Date.now());
-            return (
-              <div
-                key={key}
-                className={`min-h-[148px] rounded-[16px] border-[1.5px] p-3 text-left shadow-hard-sm ${
-                  inMonth ? "border-ink bg-card" : "border-ink/20 bg-paper2/60 text-ink-faint"
-                } ${isToday ? "ring-2 ring-lime" : ""}`}
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="display-tight text-xl font-extrabold">{day.getDate()}</span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.12em]">
-                    {day.toLocaleDateString("fr-FR", { month: "short" })}
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {entries.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-ink/20 px-2 py-2 text-xs text-ink-faint">
-                      Aucune séance
+          {loading
+            ? Array.from({ length: 14 }).map((_, index) => (
+                <Skeleton key={index} className="min-h-[148px] w-full rounded-[16px]" />
+              ))
+            : visibleDays.map((day) => {
+                const key = isoDay(day.getTime());
+                const entries = sessionsByDay.get(key) ?? [];
+                const inMonth = day.getMonth() === monthStart.getMonth();
+                const isToday = key === isoDay(Date.now());
+                return (
+                  <div
+                    key={key}
+                    className={`min-h-[148px] rounded-[16px] border-[1.5px] p-3 text-left shadow-hard-sm ${
+                      inMonth ? "border-ink bg-card" : "border-ink/20 bg-paper2/60 text-ink-faint"
+                    } ${isToday ? "ring-2 ring-lime" : ""}`}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <span className="display-tight text-xl font-extrabold">{day.getDate()}</span>
+                      <span className="font-mono text-[10px] uppercase tracking-[0.12em]">
+                        {day.toLocaleDateString("fr-FR", { month: "short" })}
+                      </span>
                     </div>
-                  ) : (
-                    entries.slice(0, 3).map((session) => {
-                      const count = courses.filter((c) => c.sessionId === session.id).length;
-                      return (
-                        <div key={session.id} className="rounded-xl border-[1.5px] border-ink bg-paper px-2 py-2">
-                          <div className="truncate text-xs font-bold text-ink">{session.title}</div>
-                          <div className="mt-1 font-mono text-[10px] text-ink-soft">
-                            {new Date(session.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                            {" · "}{count} support{count > 1 ? "s" : ""}
-                          </div>
+                    <div className="space-y-2">
+                      {entries.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-ink/20 px-2 py-2 text-xs text-ink-faint">
+                          Aucune séance
                         </div>
-                      );
-                    })
-                  )}
-                  {entries.length > 3 && (
-                    <div className="text-xs font-semibold text-ink-soft">+ {entries.length - 3} autre(s)</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                      ) : (
+                        entries.slice(0, 3).map((session) => {
+                          const count = courses.filter((c) => c.sessionId === session.id).length;
+                          return (
+                            <div key={session.id} className="rounded-xl border-[1.5px] border-ink bg-paper px-2 py-2">
+                              <div className="truncate text-xs font-bold text-ink">{session.title}</div>
+                              <div className="mt-1 font-mono text-[10px] text-ink-soft">
+                                {new Date(session.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                                {" · "}{count} support{count > 1 ? "s" : ""}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      {entries.length > 3 && (
+                        <div className="text-xs font-semibold text-ink-soft">+ {entries.length - 3} autre(s)</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
         </div>
       </div>
 

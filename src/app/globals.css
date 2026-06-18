@@ -87,3 +87,21 @@ body {
   letter-spacing: -0.03em;
   line-height: 0.95;
 }
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border: 1.5px solid rgba(22, 21, 15, 0.14);
+  background: linear-gradient(90deg, rgba(22, 21, 15, 0.06) 25%, rgba(198, 247, 81, 0.26) 50%, rgba(22, 21, 15, 0.06) 75%);
+  background-size: 220% 100%;
+  animation: skeleton-shimmer 1.6s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+}

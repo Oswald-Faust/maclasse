@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth, type Student } from "@/lib/useAuth";
 import { AppHeader } from "@/components/AppHeader";
 import { ToastProvider } from "@/components/Toast";
+import { PageSkeleton } from "@/components/Skeleton";
 
 /**
  * Enveloppe les pages réservées aux étudiants connectés :
@@ -42,11 +43,7 @@ function Guard({
   }, [loading, student, router, next]);
 
   if (loading || !student) {
-    return (
-      <div className="grid min-h-screen place-items-center font-mono text-xs uppercase tracking-widest text-ink-faint">
-        Chargement…
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

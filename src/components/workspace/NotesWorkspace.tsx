@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { fmtDateTime } from "@/lib/format";
+import { Skeleton } from "@/components/Skeleton";
 import { useWorkspace, type StudentNote } from "@/lib/useWorkspace";
 
 export function NotesWorkspace() {
@@ -47,6 +48,13 @@ export function NotesWorkspace() {
           </div>
 
           <div className="space-y-2">
+            {loading && notes.length === 0 && (
+              <>
+                <Skeleton className="h-20 w-full rounded-[16px]" />
+                <Skeleton className="h-20 w-full rounded-[16px]" />
+                <Skeleton className="h-20 w-full rounded-[16px]" />
+              </>
+            )}
             {notes.map((note) => (
               <button
                 key={note.id}
@@ -72,7 +80,13 @@ export function NotesWorkspace() {
         </div>
 
         <div className="card-paper rounded-[18px] p-5 shadow-hard">
-          {activeNote ? (
+          {loading && !activeNote ? (
+            <div>
+              <Skeleton className="mb-4 h-4 w-28" />
+              <Skeleton className="mb-3 h-14 w-full rounded-[16px]" />
+              <Skeleton className="h-56 w-full rounded-[18px]" />
+            </div>
+          ) : activeNote ? (
             <NoteEditor
               note={activeNote}
               saving={savingNote}

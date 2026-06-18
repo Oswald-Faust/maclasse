@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { fmtDateTime } from "@/lib/format";
 import { useCountdown, formatRemaining } from "@/lib/useCountdown";
+import { Skeleton } from "@/components/Skeleton";
 import {
   useWorkspace,
   type Submission,
@@ -152,6 +153,12 @@ function DevoirsTab({
   }
   return (
     <div className="grid gap-4">
+      {loading && assignments.length === 0 && (
+        <>
+          <Skeleton className="h-[360px] w-full rounded-[18px]" />
+          <Skeleton className="h-[360px] w-full rounded-[18px]" />
+        </>
+      )}
       {assignments.map((a) => (
         <AssignmentCard
           key={a.id}
@@ -292,6 +299,12 @@ function InterrosTab({
   }
   return (
     <div className="grid gap-4">
+      {loading && interrogations.length === 0 && (
+        <>
+          <Skeleton className="h-24 w-full rounded-[18px]" />
+          <Skeleton className="h-24 w-full rounded-[18px]" />
+        </>
+      )}
       {interrogations.map((i) => (
         <InterroCard
           key={i.id}

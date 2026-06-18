@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { SOLO_PROJECTS, GROUP_PROJECTS } from "@/data/projects";
 import { AuthedPage } from "@/components/AuthedPage";
 import { Modal } from "@/components/Modal";
+import { PageSkeleton, Skeleton } from "@/components/Skeleton";
 import { useToast } from "@/components/Toast";
 import { apiFetch } from "@/lib/api";
 import { fmtDateTime } from "@/lib/format";
@@ -154,11 +155,7 @@ function TeacherDashboard({ firstName }: { firstName: string }) {
   };
 
   if (loading) {
-    return (
-      <div className="grid min-h-[60vh] place-items-center font-mono text-xs uppercase tracking-widest text-ink-faint">
-        Chargement…
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (classes.length === 0 || creating) {
@@ -224,8 +221,15 @@ function TeacherDashboard({ firstName }: { firstName: string }) {
             />
           )
         ) : (
-          <div className="py-20 text-center font-mono text-xs uppercase tracking-widest text-ink-faint">
-            Chargement de la promo…
+          <div className="space-y-4 py-6">
+            <div className="card-paper rounded-[18px] p-5 shadow-hard">
+              <Skeleton className="h-10 w-64" />
+              <Skeleton className="mt-4 h-24 w-full" />
+            </div>
+            <div className="card-paper rounded-[18px] p-5 shadow-hard">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="mt-4 h-40 w-full" />
+            </div>
           </div>
         )}
       </div>
