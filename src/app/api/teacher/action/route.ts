@@ -33,6 +33,8 @@ type Action =
   | { action: "deleteGroup"; classId: string; groupId: string }
   | { action: "resetGroupProject"; classId: string; groupId: string }
   | { action: "updateTicker"; classId: string; items: string[] }
+  | { action: "createReminder"; classId: string; text: string; dueAt: number | null }
+  | { action: "deleteReminder"; classId: string; reminderId: string }
   | { action: "createSession"; classId: string; date: number; title: string; description: string }
   | { action: "updateSession"; classId: string; sessionId: string; date: number; title: string; description: string }
   | { action: "deleteSession"; classId: string; sessionId: string }
@@ -229,6 +231,34 @@ export async function POST(req: NextRequest) {
         await Setting.updateOne({ classId }, { $set: { boardTickerItems: items } }, { upsert: true });
         break;
       }
+      case "createReminder": {
+        const text = body.text.trim();
+        if (text.length < 2) {
+          return NextResponse.json({ error: "Rappel trop court." }, { status: 400 });
+        }
+        await Setting.updateOne(
+          { classId },
+          {
+            $push: {
+              teacherReminders: {
+                id: Math.random().toString(36).slice(2, 10),
+                text,
+                dueAt: typeof body.dueAt === "number" ? body.dueAt : null,
+                createdAt: Date.now(),
+              },
+            },
+          },
+          { upsert: true }
+        );
+        break;
+      }
+      case "deleteReminder":
+        await Setting.updateOne(
+          { classId },
+          { $pull: { teacherReminders: { id: body.reminderId } } },
+          { upsert: true }
+        );
+        break;
       case "removeStudent":
         await User.updateOne(
           { _id: body.studentId, classId, role: "student" },

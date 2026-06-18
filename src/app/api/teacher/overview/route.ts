@@ -11,6 +11,7 @@ import {
   InterroSubmission,
   CourseSession,
   Course,
+  Setting,
 } from "@/lib/db/models";
 import { getStudentFromRequest } from "@/lib/auth-server";
 
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Promo introuvable." }, { status: 404 });
     }
 
-    const [students, claims, groups, assignments, interrogations, sessions, courses] =
+    const [students, claims, groups, assignments, interrogations, sessions, courses, settings] =
       await Promise.all([
         User.find({ classId, role: "student" }).sort({ createdAt: 1 }).lean(),
         SoloClaim.find({ classId }).lean(),
@@ -43,6 +44,7 @@ export async function GET(req: NextRequest) {
         Interrogation.find({ classId }).sort({ createdAt: -1 }).lean(),
         CourseSession.find({ classId }).sort({ date: 1 }).lean(),
         Course.find({ classId }).select("-fileData").sort({ createdAt: -1 }).lean(),
+        Setting.findOne({ classId }).lean(),
       ]);
 
     const assignmentIds = assignments.map((a) => a._id);
@@ -142,6 +144,12 @@ export async function GET(req: NextRequest) {
         url: c.url,
         hasFile: Boolean(c.fileName),
         createdAt: (c.createdAt as Date)?.getTime?.() ?? Date.now(),
+      })),
+      reminders: (settings?.teacherReminders ?? []).map((r) => ({
+        id: r.id,
+        text: r.text,
+        dueAt: r.dueAt ?? null,
+        createdAt: r.createdAt,
       })),
     });
   } catch {

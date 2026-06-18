@@ -19,8 +19,16 @@ const KIND_LABEL: Record<WorkKind, string> = {
 };
 
 export function DevoirsWorkspace() {
+  return <WorkItemsWorkspace initialTab="devoirs" />;
+}
+
+export function InterrogationsWorkspace() {
+  return <WorkItemsWorkspace initialTab="interros" />;
+}
+
+function WorkItemsWorkspace({ initialTab }: { initialTab: "devoirs" | "interros" }) {
   const ws = useWorkspace(7000);
-  const [tab, setTab] = useState<"devoirs" | "interros">("devoirs");
+  const [tab, setTab] = useState<"devoirs" | "interros">(initialTab);
 
   const openAssignments = ws.assignments.filter((a) => a.isOpen);
   const runningInterros = ws.interrogations.filter((i) => i.status === "running");
@@ -32,11 +40,12 @@ export function DevoirsWorkspace() {
           Espace de travail
         </div>
         <h1 className="display-tight text-[clamp(2.4rem,7vw,4rem)] font-extrabold">
-          Devoirs & interrogations
+          {tab === "devoirs" ? "Devoirs" : "Interrogations"}
         </h1>
         <p className="mt-3 max-w-2xl text-base text-ink-soft">
-          Rends tes devoirs avant la date limite et passe les interrogations chronométrées
-          lancées par ton enseignant.
+          {tab === "devoirs"
+            ? "Rends tes devoirs avant la date limite et suis l'état de tes remises."
+            : "Passe les interrogations chronométrées lancées par ton enseignant et suis leur statut."}
         </p>
       </motion.div>
 

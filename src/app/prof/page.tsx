@@ -48,9 +48,21 @@ type Overview = {
     id: string; sessionId: string | null; title: string; kind: CourseKind;
     summary: string; fileName: string; url: string; hasFile: boolean; createdAt: number;
   }[];
+  reminders: { id: string; text: string; dueAt: number | null; createdAt: number }[];
 };
 
 type Action = (body: Record<string, unknown>, okMsg?: string) => Promise<{ accessCode?: string }>;
+type SubmissionKind = "assignment" | "interro";
+type SubmissionItem = {
+  id: string;
+  student: string;
+  email?: string;
+  title?: string;
+  content: string;
+  language?: string;
+  submittedAt?: number | null;
+  updatedAt: number;
+};
 
 const SECTIONS = [
   { key: "overview", label: "Vue d'ensemble", icon: "📊" },
@@ -91,6 +103,12 @@ function TeacherDashboard({ firstName }: { firstName: string }) {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [section, setSection] = useState<SectionKey>("overview");
+  const [submissionPage, setSubmissionPage] = useState<{
+    kind: SubmissionKind;
+    targetId: string;
+    targetTitle: string;
+    selectedSubmissionId?: string | null;
+  } | null>(null);
 
   const loadClasses = useCallback(async () => {
     const res = await apiFetch("/api/teacher/class");
@@ -169,15 +187,42 @@ function TeacherDashboard({ firstName }: { firstName: string }) {
         onSelect={(id) => {
           setSelectedId(id);
           setSection("overview");
+          setSubmissionPage(null);
         }}
         onNew={() => setCreating(true)}
         overview={overview}
         section={section}
-        setSection={setSection}
+        setSection={(s) => {
+          setSubmissionPage(null);
+          setSection(s);
+        }}
       />
       <div className="min-w-0">
         {overview ? (
-          <SectionContent section={section} overview={overview} action={action} setSection={setSection} />
+          submissionPage ? (
+            <SubmissionsPage
+              kind={submissionPage.kind}
+              targetId={submissionPage.targetId}
+              targetTitle={submissionPage.targetTitle}
+              selectedSubmissionId={submissionPage.selectedSubmissionId ?? null}
+              onBack={() =>
+                setSubmissionPage((cur) =>
+                  cur?.selectedSubmissionId ? { ...cur, selectedSubmissionId: null } : null
+                )
+              }
+              onOpenSubmission={(submissionId) =>
+                setSubmissionPage((cur) => (cur ? { ...cur, selectedSubmissionId: submissionId } : cur))
+              }
+            />
+          ) : (
+            <SectionContent
+              section={section}
+              overview={overview}
+              action={action}
+              setSection={setSection}
+              openSubmissions={(kind, targetId, targetTitle) => setSubmissionPage({ kind, targetId, targetTitle })}
+            />
+          )
         ) : (
           <div className="py-20 text-center font-mono text-xs uppercase tracking-widest text-ink-faint">
             Chargement de la promo…
@@ -294,11 +339,13 @@ function SectionContent({
   overview,
   action,
   setSection,
+  openSubmissions,
 }: {
   section: SectionKey;
   overview: Overview;
   action: Action;
   setSection: (s: SectionKey) => void;
+  openSubmissions: (kind: SubmissionKind, targetId: string, targetTitle: string) => void;
 }) {
   return (
     <AnimatePresence mode="wait">
@@ -311,8 +358,8 @@ function SectionContent({
       >
         {section === "overview" && <OverviewSection overview={overview} action={action} setSection={setSection} />}
         {section === "students" && <StudentsPanel students={overview.students} action={action} />}
-        {section === "assignments" && <AssignmentsPanel assignments={overview.assignments} action={action} />}
-        {section === "interros" && <InterrosPanel interrogations={overview.interrogations} action={action} />}
+        {section === "assignments" && <AssignmentsPanel assignments={overview.assignments} action={action} openSubmissions={openSubmissions} />}
+        {section === "interros" && <InterrosPanel interrogations={overview.interrogations} action={action} openSubmissions={openSubmissions} />}
         {section === "agenda" && <AgendaPanel sessions={overview.sessions} courses={overview.courses} action={action} />}
         {section === "courses" && <CoursesPanel courses={overview.courses} sessions={overview.sessions} action={action} />}
         {section === "settings" && <SettingsPanel classInfo={overview.classInfo} action={action} />}
@@ -356,6 +403,7 @@ function OverviewSection({
         <Stat value={running} label="Interros en cours" tone={running ? "lime" : undefined} />
         <Stat value={sessions.length} label="Séances" />
       </div>
+      <TeacherNotifications overview={overview} action={action} />
       <BoardPanel soloClaims={soloClaims} groups={groups} action={action} />
       <div className="mt-4 flex flex-wrap gap-2">
         <Quick label="Publier un devoir" onClick={() => setSection("assignments")} />
@@ -374,6 +422,114 @@ function Quick({ label, onClick }: { label: string; onClick: () => void }) {
     >
       {label} →
     </button>
+  );
+}
+
+function TeacherNotifications({ overview, action }: { overview: Overview; action: Action }) {
+  const now = Date.now();
+  const toast = useToast();
+  const [text, setText] = useState("");
+  const [due, setDue] = useState("");
+
+  const automatic = [
+    ...overview.assignments
+      .filter((a) => a.isOpen && a.dueDate && a.dueDate - now < 48 * 60 * 60 * 1000)
+      .map((a) => ({
+        id: `assignment-${a.id}`,
+        title: a.title,
+        body: a.dueDate && a.dueDate < now ? "Devoir en retard de clôture" : "Devoir à échéance proche",
+        when: a.dueDate,
+      })),
+    ...overview.interrogations
+      .filter((i) => i.status === "draft")
+      .map((i) => ({
+        id: `interro-${i.id}`,
+        title: i.title,
+        body: "Interrogation encore en brouillon",
+        when: null,
+      })),
+    ...overview.sessions
+      .filter((s) => s.date >= now && s.date - now < 24 * 60 * 60 * 1000)
+      .map((s) => ({
+        id: `session-${s.id}`,
+        title: s.title,
+        body: "Séance prévue dans les prochaines 24h",
+        when: s.date,
+      })),
+  ].slice(0, 6);
+
+  const manual = [...overview.reminders].sort((a, b) => (a.dueAt ?? Infinity) - (b.dueAt ?? Infinity));
+
+  async function addReminder(e: React.FormEvent) {
+    e.preventDefault();
+    if (text.trim().length < 2) {
+      toast("Le rappel est trop court.", "error");
+      return;
+    }
+    await action(
+      { action: "createReminder", text, dueAt: due ? new Date(due).getTime() : null },
+      "Rappel ajouté"
+    );
+    setText("");
+    setDue("");
+  }
+
+  return (
+    <div className="mb-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="card-paper rounded-[18px] p-5 shadow-hard">
+        <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          Notifications prof
+        </div>
+        <h3 className="display-tight mb-4 text-xl font-bold">À surveiller</h3>
+        {automatic.length === 0 ? (
+          <p className="rounded-xl border-[1.5px] border-dashed border-ink/30 bg-card/50 px-4 py-6 text-sm text-ink-faint">
+            Rien d’urgent pour l’instant.
+          </p>
+        ) : (
+          <div className="grid gap-2">
+            {automatic.map((item) => (
+              <div key={item.id} className="rounded-xl border-[1.5px] border-ink bg-paper2/60 px-4 py-3">
+                <div className="text-sm font-bold">{item.title}</div>
+                <div className="mt-1 text-sm text-ink-soft">{item.body}</div>
+                {item.when && <div className="mt-1 font-mono text-[10px] text-ink-faint">{fmtDateTime(item.when)}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card-paper rounded-[18px] p-5 shadow-hard">
+        <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          Rappels manuels
+        </div>
+        <form onSubmit={addReminder} className="mb-4 grid gap-2">
+          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Ex. Relancer les absents sur le devoir React" className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
+          <input type="datetime-local" value={due} onChange={(e) => setDue(e.target.value)} className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none" />
+          <button type="submit" className="justify-self-start rounded-full border-[1.5px] border-ink bg-lime px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-paper">
+            Ajouter un rappel →
+          </button>
+        </form>
+        {manual.length === 0 ? (
+          <p className="text-sm text-ink-faint">Aucun rappel manuel.</p>
+        ) : (
+          <div className="grid gap-2">
+            {manual.map((item) => (
+              <div key={item.id} className="flex items-start justify-between gap-3 rounded-xl border-[1.5px] border-ink bg-paper2/60 px-3 py-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{item.text}</div>
+                  <div className="mt-1 font-mono text-[10px] text-ink-faint">
+                    {item.dueAt ? fmtDateTime(item.dueAt) : "Sans date"}
+                  </div>
+                </div>
+                <button onClick={() => action({ action: "deleteReminder", reminderId: item.id }, "Rappel supprimé")} className="shrink-0 rounded-full border-[1.5px] border-ink bg-card px-2.5 py-1 text-[11px] font-semibold text-ink-soft transition hover:bg-vermilion hover:text-paper">
+                  Suppr
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -432,9 +588,11 @@ function StudentsPanel({
 function AssignmentsPanel({
   assignments,
   action,
+  openSubmissions,
 }: {
   assignments: Overview["assignments"];
   action: Action;
+  openSubmissions: (kind: SubmissionKind, targetId: string, targetTitle: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -442,7 +600,6 @@ function AssignmentsPanel({
   const [expectedFormat, setExpectedFormat] = useState("");
   const [kind, setKind] = useState<WorkKind>("code");
   const [due, setDue] = useState("");
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -497,7 +654,7 @@ function AssignmentsPanel({
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                  <button onClick={() => setDetailId(a.id)} className="rounded-full border-[1.5px] border-ink bg-card px-2.5 py-1 text-[11px] font-semibold transition hover:bg-lime">
+                  <button onClick={() => openSubmissions("assignment", a.id, a.title)} className="rounded-full border-[1.5px] border-ink bg-card px-2.5 py-1 text-[11px] font-semibold transition hover:bg-lime">
                     Rendus
                   </button>
                   <button onClick={() => action({ action: "updateAssignment", assignmentId: a.id, title: a.title, description: a.description, expectedFormat: a.expectedFormat, kind: a.kind, dueDate: a.dueDate, isOpen: !a.isOpen }, a.isOpen ? "Devoir fermé" : "Devoir rouvert")} className="rounded-full border-[1.5px] border-ink bg-card px-2.5 py-1 text-[11px] font-semibold transition hover:bg-paper2">
@@ -513,7 +670,6 @@ function AssignmentsPanel({
         </div>
       )}
 
-      <SubmissionsModal kind="assignment" id={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }
@@ -523,16 +679,17 @@ function AssignmentsPanel({
 function InterrosPanel({
   interrogations,
   action,
+  openSubmissions,
 }: {
   interrogations: Overview["interrogations"];
   action: Action;
+  openSubmissions: (kind: SubmissionKind, targetId: string, targetTitle: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [kind, setKind] = useState<WorkKind>("code");
   const [duration, setDuration] = useState(30);
-  const [detailId, setDetailId] = useState<string | null>(null);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -576,12 +733,10 @@ function InterrosPanel({
       ) : (
         <div className="grid gap-2">
           {interrogations.map((i) => (
-            <InterroRow key={i.id} interro={i} action={action} onDetail={() => setDetailId(i.id)} />
+            <InterroRow key={i.id} interro={i} action={action} onDetail={() => openSubmissions("interro", i.id, i.title)} />
           ))}
         </div>
       )}
-
-      <SubmissionsModal kind="interro" id={detailId} onClose={() => setDetailId(null)} />
     </div>
   );
 }
@@ -626,47 +781,75 @@ function InterroRow({
   );
 }
 
-/* ---------------- Détail des rendus ---------------- */
+/* ---------------- Pages de rendus ---------------- */
 
-function SubmissionsModal({
+function SubmissionsPage({
   kind,
-  id,
-  onClose,
+  targetId,
+  targetTitle,
+  selectedSubmissionId,
+  onBack,
+  onOpenSubmission,
 }: {
-  kind: "assignment" | "interro";
-  id: string | null;
-  onClose: () => void;
+  kind: SubmissionKind;
+  targetId: string;
+  targetTitle: string;
+  selectedSubmissionId: string | null;
+  onBack: () => void;
+  onOpenSubmission: (submissionId: string) => void;
 }) {
-  const [data, setData] = useState<{ title: string; submissions: Record<string, unknown>[] } | null>(null);
+  const [data, setData] = useState<{ title: string; submissions: SubmissionItem[] } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!id) {
-      setData(null);
-      return;
-    }
     setLoading(true);
-    const param = kind === "assignment" ? `assignmentId=${id}` : `interroId=${id}`;
+    const param = kind === "assignment" ? `assignmentId=${targetId}` : `interroId=${targetId}`;
     apiFetch(`/api/teacher/submissions?${param}`)
       .then((r) => r.json())
-      .then((j) => setData(j.ok ? j : { title: "", submissions: [] }))
+      .then((j) => setData(j.ok ? j : { title: targetTitle, submissions: [] }))
       .finally(() => setLoading(false));
-  }, [id, kind]);
+  }, [kind, targetId, targetTitle]);
+
+  const selected = data?.submissions.find((item) => item.id === selectedSubmissionId) ?? null;
+
+  if (selectedSubmissionId && selected) {
+    return (
+      <SubmissionDetailPage
+        kind={kind}
+        targetTitle={data?.title ?? targetTitle}
+        submission={selected}
+        onBack={onBack}
+      />
+    );
+  }
 
   return (
-    <Modal open={Boolean(id)} onClose={onClose}>
-      <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">Rendus</div>
-      <h3 className="display-tight mb-4 text-2xl font-extrabold">{data?.title ?? "…"}</h3>
+    <div>
+      <div className="mb-5 flex items-end justify-between gap-3">
+        <div>
+          <button onClick={onBack} className="mb-3 rounded-full border-[1.5px] border-ink bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-paper2">
+            ← Retour
+          </button>
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">Rendus</div>
+          <h2 className="display-tight text-3xl font-extrabold">{data?.title ?? targetTitle}</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Ouvre la liste des remises, puis clique sur un étudiant pour voir son rendu en détail.
+          </p>
+        </div>
+      </div>
       {loading ? (
         <p className="py-8 text-center font-mono text-xs uppercase tracking-widest text-ink-faint">Chargement…</p>
       ) : !data || data.submissions.length === 0 ? (
-        <p className="rounded-xl border-[1.5px] border-dashed border-ink/30 bg-card/50 py-10 text-center text-sm text-ink-faint">Aucun rendu pour le moment.</p>
+        <Empty text="Aucun rendu pour le moment." />
       ) : (
-        <div className="flex max-h-[60vh] flex-col gap-3 overflow-auto pr-1">
-          {data.submissions.map((s, idx) => {
-            const sub = s as { student: string; content: string; language?: string; submittedAt?: number | null; updatedAt: number };
+        <div className="grid gap-3">
+          {data.submissions.map((sub) => {
             return (
-              <div key={idx} className="rounded-xl border-[1.5px] border-ink bg-paper2/50 p-3">
+              <button
+                key={sub.id}
+                onClick={() => onOpenSubmission(sub.id)}
+                className="card-paper rounded-[16px] border-[1.5px] border-ink p-4 text-left shadow-hard-sm transition hover:-translate-y-0.5 hover:bg-paper2"
+              >
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <span className="text-sm font-bold">{sub.student}</span>
                   <span className="font-mono text-[10px] text-ink-faint">
@@ -675,15 +858,61 @@ function SubmissionsModal({
                       : fmtDateTime(sub.updatedAt)}
                   </span>
                 </div>
-                <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg bg-ink p-3 font-mono text-xs text-paper">
+                {sub.email && <div className="mb-2 font-mono text-[10px] text-ink-faint">{sub.email}</div>}
+                <div className="line-clamp-2 rounded-lg bg-ink px-3 py-2 font-mono text-xs text-paper">
                   {sub.content || "(vide)"}
-                </pre>
-              </div>
+                </div>
+                <div className="mt-3 text-xs font-semibold text-ink-soft">Voir le détail →</div>
+              </button>
             );
           })}
         </div>
       )}
-    </Modal>
+    </div>
+  );
+}
+
+function SubmissionDetailPage({
+  kind,
+  targetTitle,
+  submission,
+  onBack,
+}: {
+  kind: SubmissionKind;
+  targetTitle: string;
+  submission: SubmissionItem;
+  onBack: () => void;
+}) {
+  return (
+    <div>
+      <div className="mb-5">
+        <button onClick={onBack} className="mb-3 rounded-full border-[1.5px] border-ink bg-card px-3 py-1.5 text-xs font-semibold transition hover:bg-paper2">
+          ← Retour aux rendus
+        </button>
+        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          Détail du rendu
+        </div>
+        <h2 className="display-tight text-3xl font-extrabold">{submission.student}</h2>
+        <p className="mt-1 text-sm text-ink-soft">{targetTitle}</p>
+      </div>
+
+      <div className="card-paper rounded-[18px] p-5 shadow-hard">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-lg font-bold">{submission.title || "Rendu"}</div>
+            {submission.email && <div className="mt-1 font-mono text-[10px] text-ink-faint">{submission.email}</div>}
+          </div>
+          <div className="font-mono text-[10px] text-ink-faint">
+            {kind === "interro"
+              ? submission.submittedAt ? `Rendu ${fmtDateTime(submission.submittedAt)}` : "Brouillon"
+              : `Mis à jour ${fmtDateTime(submission.updatedAt)}`}
+          </div>
+        </div>
+        <pre className="overflow-auto whitespace-pre-wrap rounded-xl bg-ink p-4 font-mono text-sm text-paper">
+          {submission.content || "(vide)"}
+        </pre>
+      </div>
+    </div>
   );
 }
 
@@ -698,20 +927,33 @@ function AgendaPanel({
   courses: Overview["courses"];
   action: Action;
 }) {
+  const toast = useToast();
   const [open, setOpen] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [date, setDate] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [courseTitle, setCourseTitle] = useState("");
+  const [courseFileData, setCourseFileData] = useState("");
+  const [courseFileName, setCourseFileName] = useState("");
+  const [courseBusy, setCourseBusy] = useState(false);
   const [monthAnchor, setMonthAnchor] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1).getTime();
   });
 
-  async function create(e: React.FormEvent) {
+  async function saveSession(e: React.FormEvent) {
     e.preventDefault();
     if (!date || title.trim().length < 2) return;
-    await action({ action: "createSession", date: new Date(date).getTime(), title, description }, "Séance ajoutée");
-    setDate(""); setTitle(""); setDescription(""); setOpen(false);
+    if (editingSessionId) {
+      await action(
+        { action: "updateSession", sessionId: editingSessionId, date: new Date(date).getTime(), title, description },
+        "Séance modifiée"
+      );
+    } else {
+      await action({ action: "createSession", date: new Date(date).getTime(), title, description }, "Séance ajoutée");
+    }
+    resetSessionForm();
   }
 
   const sorted = [...sessions].sort((a, b) => a.date - b.date);
@@ -738,34 +980,104 @@ function AgendaPanel({
     return day;
   });
 
+  function resetSessionForm() {
+    setEditingSessionId(null);
+    setDate("");
+    setTitle("");
+    setDescription("");
+    setCourseTitle("");
+    setCourseFileData("");
+    setCourseFileName("");
+    setCourseBusy(false);
+    setOpen(false);
+  }
+
   function openCreateForm(forDay?: Date) {
+    setEditingSessionId(null);
+    setTitle("");
+    setDescription("");
+    setCourseTitle("");
+    setCourseFileData("");
+    setCourseFileName("");
     if (forDay) {
       const preset = new Date(forDay);
       preset.setHours(9, 0, 0, 0);
       setDate(toDateTimeLocal(preset));
+    } else {
+      setDate("");
     }
     setOpen(true);
+  }
+
+  function openEditForm(session: Overview["sessions"][number]) {
+    setEditingSessionId(session.id);
+    setDate(toDateTimeLocal(new Date(session.date)));
+    setTitle(session.title);
+    setDescription(session.description ?? "");
+    setCourseTitle("");
+    setCourseFileData("");
+    setCourseFileName("");
+    setOpen(true);
+  }
+
+  function onCourseFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4_000_000) {
+      toast("Fichier trop lourd (max ~4 Mo).", "error");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCourseFileData(reader.result as string);
+      setCourseFileName(file.name);
+      if (!courseTitle.trim()) setCourseTitle(file.name.replace(/\.pdf$/i, ""));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function uploadPdf(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingSessionId) {
+      toast("Crée d'abord la séance avant d'ajouter un PDF.", "error");
+      return;
+    }
+    if (courseTitle.trim().length < 2) {
+      toast("Ajoute un titre de support.", "error");
+      return;
+    }
+    if (!courseFileData) {
+      toast("Choisis un PDF à uploader.", "error");
+      return;
+    }
+    setCourseBusy(true);
+    await action(
+      {
+        action: "createCourse",
+        sessionId: editingSessionId,
+        title: courseTitle,
+        kind: "pdf",
+        summary: "",
+        fileData: courseFileData,
+        fileName: courseFileName,
+        url: "",
+      },
+      "PDF ajouté à la séance"
+    );
+    setCourseBusy(false);
+    setCourseTitle("");
+    setCourseFileData("");
+    setCourseFileName("");
   }
 
   return (
     <div>
       <div className="mb-5 flex items-end justify-between gap-3">
         <SectionTitle title="Agenda" sub="Le calendrier sert de base pour ajouter les séances de cours et rattacher les supports." />
-        <button onClick={() => (open ? setOpen(false) : openCreateForm())} className="shrink-0 rounded-full border-[1.5px] border-ink bg-lime px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-paper">
-          {open ? "× Annuler" : "+ Séance"}
+        <button onClick={() => (open ? resetSessionForm() : openCreateForm())} className="shrink-0 rounded-full border-[1.5px] border-ink bg-lime px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-paper">
+          {open ? "× Fermer" : "+ Séance"}
         </button>
       </div>
-
-      <AnimatePresence>
-        {open && (
-          <motion.form initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} onSubmit={create} className="card-paper mb-5 grid gap-2 overflow-hidden rounded-[16px] p-4 shadow-hard-sm">
-            <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Intitulé de la séance (ex. Introduction à React)" className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Détails / programme de la séance" className="min-h-[70px] rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
-            <button type="submit" className="justify-self-start rounded-full border-[1.5px] border-ink bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-lime hover:text-ink">Ajouter la séance →</button>
-          </motion.form>
-        )}
-      </AnimatePresence>
 
       <div className="card-paper mb-5 rounded-[18px] p-4 shadow-hard-sm">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -824,13 +1136,21 @@ function AgendaPanel({
                     entries.slice(0, 3).map((session) => {
                       const count = courses.filter((c) => c.sessionId === session.id).length;
                       return (
-                        <div key={session.id} className="rounded-xl border-[1.5px] border-ink bg-paper px-2 py-2">
+                        <button
+                          key={session.id}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditForm(session);
+                          }}
+                          className="block w-full rounded-xl border-[1.5px] border-ink bg-paper px-2 py-2 text-left transition hover:bg-lime/20"
+                        >
                           <div className="truncate text-xs font-bold text-ink">{session.title}</div>
                           <div className="mt-1 font-mono text-[10px] text-ink-soft">
                             {new Date(session.date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                             {" · "}{count} support{count > 1 ? "s" : ""}
                           </div>
-                        </div>
+                        </button>
                       );
                     })
                   )}
@@ -864,6 +1184,9 @@ function AgendaPanel({
                   </div>
                   {s.description && <p className="mt-1 text-sm text-ink-soft">{s.description}</p>}
                 </div>
+                <button onClick={() => openEditForm(s)} className="shrink-0 rounded-full border-[1.5px] border-ink bg-card px-3 py-1 text-xs font-semibold transition hover:bg-paper2">
+                  Modifier
+                </button>
                 <button onClick={() => confirm("Supprimer cette séance ? Les cours rattachés seront détachés.") && action({ action: "deleteSession", sessionId: s.id }, "Séance supprimée")} className="shrink-0 rounded-full border-[1.5px] border-ink bg-card px-3 py-1 text-xs font-semibold text-ink-soft transition hover:bg-vermilion hover:text-paper">
                   Suppr
                 </button>
@@ -872,6 +1195,70 @@ function AgendaPanel({
           })}
         </div>
       )}
+
+      <Modal open={open} onClose={resetSessionForm}>
+        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">
+          {editingSessionId ? "Séance de cours" : "Nouvelle séance"}
+        </div>
+        <h3 className="display-tight mb-4 text-2xl font-extrabold">
+          {editingSessionId ? "Modifier la séance" : "Ajouter au calendrier"}
+        </h3>
+        <form onSubmit={saveSession} className="grid gap-3">
+          <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
+          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Intitulé de la séance (ex. Introduction à React)" className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Détails / programme de la séance" className="min-h-[90px] rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none focus:shadow-hard-sm" />
+          <div className="flex justify-end gap-2 pt-1">
+            <button type="button" onClick={resetSessionForm} className="rounded-full border-[1.5px] border-ink bg-card px-4 py-2 text-sm font-semibold transition hover:bg-paper2">
+              Annuler
+            </button>
+            <button type="submit" className="rounded-full border-[1.5px] border-ink bg-ink px-4 py-2 text-sm font-bold text-paper transition hover:bg-lime hover:text-ink">
+              {editingSessionId ? "Enregistrer la séance →" : "Ajouter la séance →"}
+            </button>
+          </div>
+        </form>
+
+        <div className="my-5 h-px bg-ink/10" />
+
+        <div className="mb-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-soft">Support PDF</div>
+          <h4 className="display-tight text-xl font-bold">Uploader un cours pour cette séance</h4>
+          <p className="mt-1 text-sm text-ink-soft">
+            {editingSessionId
+              ? "Ajoute ici le PDF qui sera rattaché à cette séance."
+              : "Enregistre d'abord la séance, puis tu pourras lui rattacher un PDF ici."}
+          </p>
+        </div>
+
+        <form onSubmit={uploadPdf} className="grid gap-3">
+          <input
+            value={courseTitle}
+            onChange={(e) => setCourseTitle(e.target.value)}
+            placeholder="Titre du support PDF"
+            disabled={!editingSessionId || courseBusy}
+            className="rounded-xl border-[1.5px] border-ink bg-card px-3 py-2 text-sm outline-none disabled:opacity-50 focus:shadow-hard-sm"
+          />
+          <label className={`grid gap-3 rounded-xl border-[1.5px] border-dashed border-ink bg-card px-4 py-4 text-sm ${editingSessionId ? "cursor-pointer transition hover:bg-paper2" : "opacity-50"}`}>
+            <div>
+              <div className="font-semibold text-ink">Uploader le document PDF</div>
+              <div className="mt-1 text-xs text-ink-soft">Sélectionne le support de cours à partager avec les étudiants.</div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <span className="truncate text-ink-soft">{courseFileName || "Aucun document sélectionné"}</span>
+              <span className="shrink-0 rounded-full bg-ink px-3 py-1 text-xs font-bold text-paper">Choisir un fichier</span>
+            </div>
+            <input type="file" accept="application/pdf" disabled={!editingSessionId || courseBusy} onChange={onCourseFile} className="hidden" />
+          </label>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={!editingSessionId || courseBusy}
+              className="rounded-full border-[1.5px] border-ink bg-lime px-4 py-2 text-sm font-bold text-ink transition hover:bg-ink hover:text-paper disabled:opacity-50"
+            >
+              {courseBusy ? "Upload…" : "Uploader le PDF →"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
