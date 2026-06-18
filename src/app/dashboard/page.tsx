@@ -100,7 +100,7 @@ function DashboardView({ student }: { student: Student }) {
                 title={soloProject.title}
               />
               <p className="mt-3 text-sm text-ink-soft">{soloProject.description}</p>
-              <CardLink href="/choix">Voir le tableau →</CardLink>
+              <CardLink href="/choix/projet-personnel">Voir le projet →</CardLink>
             </>
           ) : (
             <Empty emoji="🎯" text="Tu n'as pas encore réservé de projet personnel. Choisis vite." cta="Choisir mon projet" />

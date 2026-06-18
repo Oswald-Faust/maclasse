@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { SOLO_PROJECTS, GROUP_PROJECTS } from "@/data/projects";
 import { AuthedPage } from "@/components/AuthedPage";
@@ -98,6 +99,7 @@ function TeacherGate({ student }: { student: Student }) {
 
 function TeacherDashboard({ firstName }: { firstName: string }) {
   const toast = useToast();
+  const searchParams = useSearchParams();
   const [classes, setClasses] = useState<ClassSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -110,16 +112,31 @@ function TeacherDashboard({ firstName }: { firstName: string }) {
     targetTitle: string;
     selectedSubmissionId?: string | null;
   } | null>(null);
+  const requestedClassId = searchParams.get("classId");
+  const requestedSection = searchParams.get("section");
 
   const loadClasses = useCallback(async () => {
     const res = await apiFetch("/api/teacher/class");
     const json = await res.json();
     if (res.ok) {
       setClasses(json.classes);
-      setSelectedId((cur) => cur ?? json.classes[0]?.id ?? null);
+      setSelectedId((cur) => {
+        if (cur) return cur;
+        if (requestedClassId && json.classes.some((item: ClassSummary) => item.id === requestedClassId)) {
+          return requestedClassId;
+        }
+        return json.classes[0]?.id ?? null;
+      });
     }
     setLoading(false);
-  }, []);
+  }, [requestedClassId]);
+
+  useEffect(() => {
+    if (!requestedSection) return;
+    if (SECTIONS.some((item) => item.key === requestedSection)) {
+      setSection(requestedSection as SectionKey);
+    }
+  }, [requestedSection]);
 
   const loadOverview = useCallback(async (classId: string) => {
     const res = await apiFetch(`/api/teacher/overview?classId=${classId}`);
@@ -361,7 +378,7 @@ function SectionContent({
         transition={{ duration: 0.25 }}
       >
         {section === "overview" && <OverviewSection overview={overview} action={action} setSection={setSection} />}
-        {section === "students" && <StudentsPanel students={overview.students} action={action} />}
+        {section === "students" && <StudentsPanel classId={overview.classInfo.id} students={overview.students} action={action} />}
         {section === "assignments" && <AssignmentsPanel assignments={overview.assignments} action={action} openSubmissions={openSubmissions} />}
         {section === "interros" && <InterrosPanel interrogations={overview.interrogations} action={action} openSubmissions={openSubmissions} />}
         {section === "agenda" && <AgendaPanel sessions={overview.sessions} courses={overview.courses} action={action} />}
@@ -540,9 +557,11 @@ function TeacherNotifications({ overview, action }: { overview: Overview; action
 /* ---------------- Étudiants ---------------- */
 
 function StudentsPanel({
+  classId,
   students,
   action,
 }: {
+  classId: string;
   students: Overview["students"];
   action: Action;
 }) {
@@ -570,15 +589,23 @@ function StudentsPanel({
                   <div className="font-mono text-[10px] text-ink-faint">{s.email}</div>
                 </div>
               </div>
-              <button
-                onClick={() =>
-                  confirm(`Retirer ${s.firstName} de la promo ?`) &&
-                  action({ action: "removeStudent", studentId: s.id }, "Étudiant retiré")
-                }
-                className="rounded-full border-[1.5px] border-ink bg-card px-3 py-1 text-xs font-semibold text-ink-soft transition hover:bg-vermilion hover:text-paper"
-              >
-                Retirer
-              </button>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/prof/etudiants/${s.id}?classId=${classId}`}
+                  className="rounded-full border-[1.5px] border-ink bg-lime px-3 py-1 text-xs font-semibold text-ink transition hover:bg-ink hover:text-paper"
+                >
+                  Voir
+                </Link>
+                <button
+                  onClick={() =>
+                    confirm(`Retirer ${s.firstName} de la promo ?`) &&
+                    action({ action: "removeStudent", studentId: s.id }, "Étudiant retiré")
+                  }
+                  className="rounded-full border-[1.5px] border-ink bg-card px-3 py-1 text-xs font-semibold text-ink-soft transition hover:bg-vermilion hover:text-paper"
+                >
+                  Retirer
+                </button>
+              </div>
             </div>
           ))}
         </div>
